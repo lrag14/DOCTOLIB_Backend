@@ -2,11 +2,16 @@ const express = require('express');
 const app = express();
 
 app.use(express.json());
+
 const mongoose = require('mongoose');
+const router = express.Router();
+
 const Consultation = require('./models/Consultation.js');
 mongoose.connect('mongodb://localhost/doctolib');
 
 ////*******************VERIFIE DISPONIBILTE */
+
+// const { name, tranche } = req.body;
 app.get('/visits', async (req, res) => {
    const consultation = await Consultation.findOne({ date: req.query.date });
 
@@ -43,15 +48,19 @@ app.post('/visits', async (req, res) => {
 
       // Si la date existe, vérifiez si la tranche est libre
       if (consultation) {
+         // console.log(consultation.tranche);
+         // console.log(req.body.tranche);
+
          if (consultation.tranche[req.body.tranche].isAvailable === true) {
             consultation.tranche[req.body.tranche].name = req.body.name;
 
             consultation.tranche[req.body.tranche].isAvailable = false;
             await consultation.save();
-
-            res.json({ message: 'réservation successfuly' });
+            res.status(201).json({ message: 'réservation successfuly' });
          } else {
-            res.json({ error: { message: 'tranche already booked' } });
+            res.status(400).json({
+               error: { message: 'tranche already booked' },
+            });
          }
       } else {
          // Si la date n'existe pas, créez-la et réservez la tranche
@@ -79,10 +88,32 @@ app.post('/visits', async (req, res) => {
          res.status(201).json({ message: 'réservation successfuly' });
       }
    } catch (error) {
-      res.status(400).json({ error: error.message });
+      console.log(error);
+      res.status(500).json({ error: error.message });
    }
 });
 
+// ::::::**************************ANNULATION
+
+app.post('/visits/cancel', async (req, res) => {
+   try {
+      const consultation = await Consultation.findOne({ date: req.query.date });
+      if (req.body.name === consultation.tranche[req.body.tranche].name) {
+         consultation.tranche[req.body.tranche].name = '';
+         consultation.tranche[req.body.tranche].isAvailable = true;
+         await consultation.save();
+         res.status(200).json({ message: 'Successfuly unbooked.' });
+      } else {
+         res.status(401).json({
+            error: { message: "You can't unbook a meeting which is not yours" },
+         });
+      }
+   } catch (error) {
+      res.status(500).json({ error: error.message });
+   }
+});
+
+module.exports = router;
 /////////////////////////////////////////////////////////
 app.all('*', (req, res) => {
    res.status(404).json({ error: 'route not found' });
